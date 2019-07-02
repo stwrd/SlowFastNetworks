@@ -14,26 +14,47 @@ class VideoDataset(Dataset):
     def __init__(self, directory, mode='train', clip_len=8, frame_sample_rate=1):
         folder = Path(directory)/mode  # get the directory of the specified split
         self.clip_len = clip_len
-        self.short_side = [128*2, 160*2]
-        self.crop_size = 112*2
+        self.short_side = [128, 160]
+        self.crop_size = 112
         self.frame_sample_rate = frame_sample_rate
         self.mode = mode
 
-
         self.fnames, labels = [], []
-        for label in sorted(os.listdir(folder)):
-            for fname in os.listdir(os.path.join(folder, label)):
-                self.fnames.append(os.path.join(folder, label, fname))
-                labels.append(label)
-        # prepare a mapping between the label names (strings) and indices (ints)
-        self.label2index = {label:index for index, label in enumerate(sorted(set(labels)))} 
-        # convert the list of label names into an array of label indices
-        self.label_array = np.array([self.label2index[label] for label in labels], dtype=np.int64)
-
-        label_file = str(len(os.listdir(folder)))+'class_labels.txt'
-        with open(label_file, 'w') as f:
-            for id, label in enumerate(sorted(self.label2index)):
-                f.writelines(str(id + 1) + ' ' + label + '\n')
+        if mode == 'train':
+            with open(os.path.join(directory,mode+'.txt'), 'r') as file:
+                video_files = file.readlines()
+                video_files = [video_file.replace('\n', '') for video_file in video_files]
+                for video_file in video_files:
+                    f, l = video_file.split(' ')
+                    self.fnames.append(os.path.join(directory,f))
+                    labels.append(int(l))
+                self.label_array = np.array(labels) -1
+        else:
+            with open(os.path.join(directory,'classInd.txt')) as file:
+                pairs = file.readlines()
+                pairs = [pair.replace('\n', '') for pair in pairs]
+                self.label2index = {p.split(' ')[1]: int(p.split(' ')[0]) for p in pairs}
+            with open(os.path.join(directory,mode+'.txt'), 'r') as file:
+                video_files = file.readlines()
+                video_files = [video_file.replace('\n', '') for video_file in video_files]
+                for video_file in video_files:
+                    self.fnames.append(os.path.join(directory,video_file))
+                    name = video_file.split('/',1)[0]
+                    labels.append(self.label2index[name])
+                self.label_array = np.array(labels) -1
+        # for label in sorted(os.listdir(folder)):
+        #     for fname in os.listdir(os.path.join(folder, label)):
+        #         self.fnames.append(os.path.join(folder, label, fname))
+        #         labels.append(label)
+        # # prepare a mapping between the label names (strings) and indices (ints)
+        # self.label2index = {label:index for index, label in enumerate(sorted(set(labels)))}
+        # # convert the list of label names into an array of label indices
+        # self.label_array = np.array([self.label2index[label] for label in labels], dtype=np.int64)
+        #
+        # label_file = str(len(os.listdir(folder)))+'class_labels.txt'
+        # with open(label_file, 'w') as f:
+        #     for id, label in enumerate(sorted(self.label2index)):
+        #         f.writelines(str(id + 1) + ' ' + label + '\n')
 
         # Sometimes(0.5, ...) applies the given augmenter in 50% of all cases,
         # e.g. Sometimes(0.5, GaussianBlur(0.3)) would blur roughly every second image.
@@ -124,9 +145,9 @@ class VideoDataset(Dataset):
         # loading and preprocessing. TODO move them to transform classes
         buffer = self.new_loadvideo(self.fnames[index],self.crop_size)
 
-        # while buffer.shape[0]<self.clip_len+2 :
-        #     index = np.random.randint(self.__len__())
-        #     buffer = self.loadvideo(self.fnames[index])
+        while buffer.shape[0]<self.clip_len:
+            index = np.random.randint(self.__len__())
+            buffer = self.new_loadvideo(self.fnames[index],self.crop_size)
 
         if self.mode == 'train' or self.mode == 'training':
             buffer = self.randomflip(buffer)
@@ -245,7 +266,10 @@ class VideoDataset(Dataset):
         #     resize_height = int(float(resize_width) / frame_width * frame_height)
 
         # randomly select time index for temporal jittering
-        time_index = np.random.randint(frame_count - self.clip_len + 1)
+        if frame_count < self.clip_len:
+            time_index = 0
+        else:
+            time_index = np.random.randint(frame_count - self.clip_len + 1)
 
 
         # create a buffer. Must have dtype float, so it gets converted to a FloatTensor by Pytorch later
@@ -267,6 +291,8 @@ class VideoDataset(Dataset):
                 frame = cv2.resize(frame, (crop_size, crop_size))
                 buffer[sample_count] = frame
                 sample_count = sample_count + 1
+            else:
+                break
             count += 1
         capture.release()
         return buffer
@@ -293,8 +319,8 @@ class VideoDataset(Dataset):
 
 if __name__ == '__main__':
 
-    datapath = r'E:\workspace\data\fighting_data'
+    datapath = r'H:\BaiduNetdiskDownload\UCF-101'
     train_dataloader = \
-        DataLoader( VideoDataset(datapath, mode='train',clip_len=36), batch_size=8, shuffle=True, num_workers=1)
+        DataLoader( VideoDataset(datapath, mode='test',clip_len=36), batch_size=8, shuffle=True, num_workers=0)
     for step, (buffer, label) in enumerate(train_dataloader):
         print("label: ", label)

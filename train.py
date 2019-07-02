@@ -239,7 +239,7 @@ def main():
     model = nn.DataParallel(model, device_ids=params['gpu'])  # multi-Gpu
 
     #criterion = nn.CrossEntropyLoss().cuda()
-    criterion = FocalLoss(2,torch.FloatTensor([1,3])).cuda()
+    criterion = FocalLoss(101).cuda()
     optimizer = optim.SGD(model.parameters(), lr=params['learning_rate'], momentum=params['momentum'], weight_decay=params['weight_decay'])
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params['step'], gamma=0.1)
 
