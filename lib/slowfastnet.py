@@ -88,8 +88,8 @@ class SlowFast(nn.Module):
         self.dp = nn.Dropout(dropout)
         self.fc = nn.Linear(self.fast_inplanes+2048, class_num, bias=False)
     def forward(self, input):
-        fast, lateral = self.FastPath(input[:, :, ::2, :, :])
-        slow = self.SlowPath(input[:, :, ::16, :, :], lateral)
+        fast, lateral = self.FastPath(input[:, :, ::1, :, :])
+        slow = self.SlowPath(input[:, :, ::8, :, :], lateral)
         x = torch.cat([slow, fast], dim=1)
         x = self.dp(x)
         x = self.fc(x)
