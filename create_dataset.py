@@ -6,8 +6,8 @@ from config import params
 import shutil
 
 train_percent = 0.9
-dataset_path = r'E:\workspace\data\tmp'
-dst_dataset_path = r'E:\workspace\data\fighting_data'
+dataset_path = r'/media/hzh/work/workspace/data/fighting'
+dst_dataset_path = r'/media/hzh/work/workspace/data/fighting_data'
 
 train_path = os.path.join(dst_dataset_path, 'train')
 test_path = os.path.join(dst_dataset_path, 'test')
@@ -26,7 +26,7 @@ for sub_class in sub_classlist:
         cap = cv2.VideoCapture(video_path)
         if cap.isOpened():
             all_cnt = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-            if all_cnt >= params['clip_len']+2:
+            if all_cnt >= params['clip_len']:
                 filter_videolist.append(video_path)
 
     num=len(filter_videolist)
@@ -40,6 +40,7 @@ for sub_class in sub_classlist:
     sub_test_path = os.path.join(test_path,sub_class)
     os.makedirs(sub_test_path,exist_ok=True)
     for i in list:
+        print(filter_videolist[i])
         if i in trainlist:
             shutil.copy(filter_videolist[i],sub_train_path)
         else:

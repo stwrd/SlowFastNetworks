@@ -7,7 +7,7 @@ from torch.utils.data import DataLoader, Dataset
 import augmentations
 import imgaug.augmenters as iaa
 import imgaug as ia
-
+from torch.utils.data.sampler import WeightedRandomSampler
 
 class VideoDataset(Dataset):
 
@@ -124,9 +124,9 @@ class VideoDataset(Dataset):
         # loading and preprocessing. TODO move them to transform classes
         buffer = self.new_loadvideo(self.fnames[index],self.crop_size)
 
-        # while buffer.shape[0]<self.clip_len+2 :
-        #     index = np.random.randint(self.__len__())
-        #     buffer = self.loadvideo(self.fnames[index])
+        while buffer.shape[0]<self.clip_len:
+            index = np.random.randint(self.__len__())
+            buffer = self.new_loadvideo(self.fnames[index],self.crop_size)
 
         if self.mode == 'train' or self.mode == 'training':
             buffer = self.randomflip(buffer)
@@ -230,6 +230,7 @@ class VideoDataset(Dataset):
         frame_count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
         frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        assert (frame_count != 0 and frame_height != 0 and frame_width != 0)
 
         # Randomly select start indices in order to crop the video
         top = np.random.randint(frame_height * 0.1)
@@ -245,13 +246,13 @@ class VideoDataset(Dataset):
         #     resize_height = int(float(resize_width) / frame_width * frame_height)
 
         # randomly select time index for temporal jittering
-        time_index = np.random.randint(frame_count - self.clip_len + 1)
+
+        time_index = np.random.randint(max(1,frame_count - self.clip_len + 1))
 
 
         # create a buffer. Must have dtype float, so it gets converted to a FloatTensor by Pytorch later
         buffer = np.empty((self.clip_len, crop_size, crop_size, 3), np.dtype('uint8'))
 
-        count = 0
         sample_count = 0
 
         # read in each frame, one at a time into the numpy buffer array
@@ -267,7 +268,8 @@ class VideoDataset(Dataset):
                 frame = cv2.resize(frame, (crop_size, crop_size))
                 buffer[sample_count] = frame
                 sample_count = sample_count + 1
-            count += 1
+            else:
+                break
         capture.release()
         return buffer
 
@@ -284,7 +286,6 @@ class VideoDataset(Dataset):
         if np.random.random() < 0.5:
             for i, frame in enumerate(buffer):
                 buffer[i] = cv2.flip(frame, flipCode=1)
-
         return buffer
 
     def __len__(self):
@@ -293,8 +294,23 @@ class VideoDataset(Dataset):
 
 if __name__ == '__main__':
 
-    datapath = r'E:\workspace\data\fighting_data'
-    train_dataloader = \
-        DataLoader( VideoDataset(datapath, mode='train',clip_len=36), batch_size=8, shuffle=True, num_workers=1)
+
+    datapath = r'/media/hzh/work/workspace/data/fighting_data'
+    dataset = VideoDataset(datapath, mode='train',clip_len=36)
+    num_samples = len(dataset.label_array)
+    pos_num = dataset.label_array.sum()
+    neg_num = num_samples - pos_num
+    w = neg_num/pos_num
+    weight_mat = np.ones_like(dataset.label_array,dtype=np.float)
+    weight_mat[dataset.label_array==1] = w
+
+    sampler = WeightedRandomSampler(weight_mat,
+                                    num_samples=num_samples,
+                                    replacement=True)
+    train_dataloader = DataLoader( dataset, batch_size=8, sampler=sampler, num_workers=4)
+    cnt = 0
     for step, (buffer, label) in enumerate(train_dataloader):
+        print("step:",step)
         print("label: ", label)
+        cnt += label.sum()
+    print('pos num is {}/{}'.format(cnt,num_samples))

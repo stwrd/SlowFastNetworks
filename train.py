@@ -11,7 +11,7 @@ from lib.dataset import VideoDataset
 from lib import slowfastnet
 from tensorboardX import SummaryWriter
 import augmentations
-
+from torch.utils.data.sampler import WeightedRandomSampler
 class FocalLoss(nn.Module):
     r"""
         This criterion is a implemenation of Focal Loss, which is proposed in
@@ -119,7 +119,6 @@ def train(model, train_dataloader, epoch, criterion, optimizer, writer):
     end = time.time()
     for step, (inputs, labels) in enumerate(train_dataloader):
         data_time.update(time.time() - end)
-
         inputs = inputs.cuda()
         labels = labels.cuda()
         outputs = model(inputs)
@@ -138,6 +137,7 @@ def train(model, train_dataloader, epoch, criterion, optimizer, writer):
         end = time.time()
         if (step+1) % params['display'] == 0:
             print('-------------------------------------------------------')
+            print('label:',labels)
             for param in optimizer.param_groups:
                 print('lr: ', param['lr'])
             print_string = 'Epoch: [{0}][{1}/{2}]'.format(epoch, step+1, len(train_dataloader))
@@ -210,11 +210,20 @@ def main():
 
     writer = SummaryWriter(log_dir=logdir)
 
+    dataset = VideoDataset(params['dataset'], mode='train',clip_len=params['clip_len'],frame_sample_rate=params['frame_sample_rate'])
+    num_samples = len(dataset.label_array)
+    pos_num = dataset.label_array.sum()
+    neg_num = num_samples - pos_num
+    w = neg_num/pos_num
+    weight_mat = np.ones_like(dataset.label_array,dtype=np.float)
+    weight_mat[dataset.label_array==1] = w
+
+    sampler = WeightedRandomSampler(weight_mat,
+                                    num_samples=num_samples,
+                                    replacement=True)
     print("Loading dataset")
     train_dataloader = \
-        DataLoader(
-            VideoDataset(params['dataset'], mode='train', clip_len=params['clip_len'], frame_sample_rate=params['frame_sample_rate']),
-            batch_size=params['batch_size'], shuffle=True, num_workers=params['num_workers'])
+        DataLoader(dataset,batch_size=params['batch_size'], sampler=sampler, num_workers=params['num_workers'])
 
     val_dataloader = \
         DataLoader(
@@ -238,8 +247,8 @@ def main():
     model = model.cuda(params['gpu'][0])
     model = nn.DataParallel(model, device_ids=params['gpu'])  # multi-Gpu
 
-    #criterion = nn.CrossEntropyLoss().cuda()
-    criterion = FocalLoss(2,torch.FloatTensor([1,3])).cuda()
+    criterion = nn.CrossEntropyLoss().cuda()
+    # criterion = FocalLoss(2,torch.FloatTensor([1,3])).cuda()
     optimizer = optim.SGD(model.parameters(), lr=params['learning_rate'], momentum=params['momentum'], weight_decay=params['weight_decay'])
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=params['step'], gamma=0.1)
 

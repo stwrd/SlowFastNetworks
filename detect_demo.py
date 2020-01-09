@@ -8,6 +8,7 @@ from torch.utils.data import DataLoader
 import torch.backends.cudnn as cudnn
 from lib.dataset import VideoDataset
 from lib import slowfastnet
+
 from tensorboardX import SummaryWriter
 import cv2
 
@@ -15,14 +16,11 @@ CROP_SIZE = 224
 
 def main():
     # prepare images path
-    cls_name = os.listdir(r'H:\Anomaly-Videos\fighting')
-    videos_name = []
-    labels = np.empty([0],np.int64)
-    for i,cls in enumerate(cls_name):
-        sub_path = os.path.join(params["test_video_path"],cls)
-        sub_names = os.listdir(sub_path)
-        videos_name += [os.path.join(sub_path, name) for name in sub_names]
-        labels = np.concatenate((labels,np.ones([len(sub_names)],np.int64)*i),0)
+    tar_path = r'/media/hzh/ssd_disk/打架标注数据/fight_data20191114done/test'
+    out_path = r'/media/hzh/work/workspace/data/fighting_data/dj/out'
+    os.makedirs(out_path,exist_ok=True)
+    videos_name = os.listdir(tar_path)
+    videos_name = [os.path.join(tar_path, name) for name in videos_name]
 
     if len(videos_name) == 0:
         raise Exception("no image found in {}".format(params["test_video_path"]))
@@ -57,17 +55,6 @@ def main():
             frame_width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
             frame_height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
-            left=0
-            top=0
-            if frame_height < frame_width:
-                resize_height = CROP_SIZE
-                resize_width = int(float(resize_height) / frame_height * frame_width)
-                left = (resize_width - CROP_SIZE)//2
-            else:
-                resize_width = CROP_SIZE
-                resize_height = int(float(resize_width) / frame_width * frame_height)
-                top = (resize_height-CROP_SIZE)//2
-
             frame_list = []
             src_frame_list = []
             new_video_idx = 1
@@ -88,17 +75,20 @@ def main():
                         tensor_frame = np.array(frame_list).transpose((3, 0, 1, 2))
                         inputs = torch.from_numpy(tensor_frame).cuda()
                         outputs = model(inputs.unsqueeze(0))
+                        # outputs = model(torch.ones_like(inputs).unsqueeze(0).cuda())
                         outputs = torch.nn.functional.softmax(outputs).cpu().numpy()
                         if np.argmax(outputs,1) == 1:
                             fourcc = cv2.VideoWriter_fourcc(*'XVID')
-                            basename = os.path.splitext(videos_name[i])
-                            vw = cv2.VideoWriter(basename + '_%03d'%new_video_idx + '.mp4', fourcc, 6.0, (frame_width, frame_height))
+                            basename = os.path.splitext(os.path.split(videos_name[i])[1])[0]
+                            save_video_name = os.path.join(out_path,basename + '_%03d' %new_video_idx + '.mp4')
+                            print('find fighting save to ',save_video_name)
+                            vw = cv2.VideoWriter(save_video_name, fourcc, 6.0, (frame_width, frame_height))
                             for im in src_frame_list:
                                 vw.write(im)
                             vw.release()
                             new_video_idx+=1
-                        frame_list = fix_images(frame_list,1)
-                        src_frame_list = fix_images(src_frame_list,1)
+                        frame_list = fix_images(frame_list,12)
+                        src_frame_list = fix_images(src_frame_list,12)
 
                 else:
                     break

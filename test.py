@@ -119,13 +119,14 @@ def main():
                         inputs = torch.from_numpy(tensor_frame).cuda()
                         outputs = model(inputs.unsqueeze(0))
 
-                        # if trace_torch_model:
-                        #     trace_model = torch.jit.trace(model,inputs.unsqueeze(0))
-                        #     pred_out = trace_model(inputs.unsqueeze(0))
-                        #     pred_out1 = trace_model(torch.ones_like(inputs).unsqueeze(0).cuda())
-                        #     trace_torch_model = False
-                        #     os.makedirs('./weights',exist_ok=True)
-                        #     trace_model.save('./weights/fighting_detect_model.pt')
+                        if trace_torch_model:
+                            trace_model = torch.jit.trace(model,inputs.unsqueeze(0))
+                            pred_out = trace_model(inputs.unsqueeze(0))
+                            pred_out1 = trace_model(torch.ones_like(inputs).unsqueeze(0).cuda())
+                            trace_torch_model = False
+                            os.makedirs('./weights',exist_ok=True)
+                            trace_model.save('./weights/fighting_detect_model.pt')
+                            break
 
                         prec1, = accuracy(outputs.data, labels[i])
                         if prec1.item()< 1:
@@ -137,6 +138,7 @@ def main():
                     break
 
             capture.release()
+            break
         print_string = 'Top-1 accuracy: {top1_acc:.2f}%'.format(top1_acc=top1.avg)
         print(print_string)
 
